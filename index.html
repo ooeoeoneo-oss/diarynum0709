@@ -1,0 +1,552 @@
+<title>이샹의 메모장</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 폰 프레임 하나 안에 목록 화면과 상세 화면이 겹쳐 있고, 달력 시트가 아래에서 올라온다. */
+:root {
+  --bg: #dcdfe4;
+  --screen: #f2f2f7;
+  --card: #ffffff;
+  --ink: #1c1c1e;
+  --body: #0c0c0e;
+  --ink2: #636366;
+  --ink3: #8e8e93;
+  --line: #e2e2e7;
+  --accent: #a96800;
+  --accent-soft: #f7e8cb;
+  --bezel: #1c1c1e;
+  --scrim: rgba(0, 0, 0, 0.35);
+  --shadow: 0 24px 60px rgba(30, 34, 44, 0.22);
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0d10;
+    --screen: #000000;
+    --card: #1c1c1e;
+    --ink: #f2f2f7;
+    --body: #f7f7fa;
+    --ink2: #aeaeb2;
+    --ink3: #8e8e93;
+    --line: #2c2c2e;
+    --accent: #f5b13d;
+    --accent-soft: #3a2c10;
+    --bezel: #3a3a3c;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0d10;
+  --screen: #000000;
+  --card: #1c1c1e;
+  --ink: #f2f2f7;
+    --body: #f7f7fa;
+  --ink2: #aeaeb2;
+  --ink3: #8e8e93;
+  --line: #2c2c2e;
+  --accent: #f5b13d;
+  --accent-soft: #3a2c10;
+  --bezel: #3a3a3c;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+.stage { height: 100%; display: flex; justify-content: center; align-items: center; }
+.phone {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+  max-height: 820px;
+  background: var(--screen);
+  border: 7px solid var(--bezel);
+  border-radius: 46px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  isolation: isolate;
+}
+
+/* 상태 표시줄 */
+.status {
+  position: absolute; inset: 0 0 auto 0; height: 44px; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 26px 0; font-size: 15px; font-weight: 700; color: var(--ink);
+  pointer-events: none;
+}
+.status svg { display: block; }
+.status .icons { display: flex; gap: 6px; align-items: center; }
+
+/* 두 화면 */
+.pane {
+  position: absolute; inset: 0; padding-top: 44px;
+  display: flex; flex-direction: column;
+  background: var(--screen);
+  transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0s;
+}
+.list-pane { transform: translateX(0); }
+.detail-pane { transform: translateX(100%); visibility: hidden; transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0.32s; }
+.phone.is-detail .list-pane { transform: translateX(-28%); visibility: hidden; transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0.32s; }
+.phone.is-detail .detail-pane { transform: translateX(0); visibility: visible; transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0s; }
+@media (prefers-reduced-motion: reduce) {
+  .pane, .detail-pane, .phone.is-detail .list-pane, .phone.is-detail .detail-pane, .sheet, .scrim { transition: none !important; }
+}
+
+.topbar { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px)); }
+.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; color: var(--accent); border-radius: 50%; }
+.icon-btn svg { display: block; }
+.back-btn { display: flex; align-items: center; gap: 2px; color: var(--accent); font-size: 17px; height: 40px; padding-right: 10px; }
+
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 28px max(16px, env(safe-area-inset-left, 0px)); }
+
+/* 목록 */
+.title-block { padding: 4px 4px 12px; }
+.title-block h1 { margin: 0; font-size: 32px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+.title-block p { margin: 4px 0 0; font-size: 14px; color: var(--ink3); }
+
+.search {
+  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px;
+  background: var(--card); border-radius: 12px; color: var(--ink3); margin-bottom: 8px;
+}
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 16px; outline-offset: 6px; }
+.search input::placeholder { color: var(--ink3); }
+
+.year { margin: 18px 4px 8px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.group { background: var(--card); border-radius: 14px; overflow: hidden; }
+.row { display: block; width: 100%; text-align: left; padding: 12px 16px 13px; position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--line); }
+.row:active { background: var(--line); }
+.row .f { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 13px; color: var(--ink3); }
+.row .f svg { flex: none; }
+.row .sd { color: var(--ink); margin-right: 0.6em; font-variant-numeric: tabular-nums; }
+.row .t { display: block; font-size: 16.5px; font-weight: 700; line-height: 1.35; word-break: keep-all; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .p { display: block; margin-top: 3px; font-size: 14px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.empty { text-align: center; padding: 56px 16px; color: var(--ink3); font-size: 15px; line-height: 1.6; }
+
+/* 상세 */
+.detail-pane { background: var(--card); }
+.article { padding: 10px 10px 32px; }
+.stamp { text-align: center; font-size: 12.5px; color: var(--ink3); margin: 4px 0 18px; font-variant-numeric: tabular-nums; }
+.article h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.4; font-weight: 700; letter-spacing: -0.02em; color: var(--body); word-break: keep-all; }
+.article p { margin: 0 0 1.35em; font-size: 16.5px; line-height: 1.95; letter-spacing: -0.005em; color: var(--body); word-break: keep-all; overflow-wrap: break-word; }
+.toolbar {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--line); background: var(--card);
+}
+.step { display: flex; align-items: center; gap: 4px; color: var(--accent); font-size: 14.5px; min-height: 40px; padding: 0 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
+.step[disabled] { color: var(--ink3); opacity: 0.55; cursor: default; }
+.toolbar .pos { font-size: 12.5px; color: var(--ink3); font-variant-numeric: tabular-nums; }
+
+/* 날짜 이동 시트 */
+.scrim { position: absolute; inset: 0; z-index: 8; background: var(--scrim); opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0s linear 0.25s; }
+.scrim.on { opacity: 1; visibility: visible; transition: opacity 0.25s, visibility 0s; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 9;
+  background: var(--card); border-radius: 22px 22px 0 0; padding: 14px 16px 22px;
+  transform: translateY(105%); visibility: hidden; transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s linear 0.3s;
+}
+.sheet.on { transform: translateY(0); visibility: visible; transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.2, 1), visibility 0s; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.sheet-head .month { font-size: 17px; font-weight: 700; }
+.sheet-head .nav { display: flex; gap: 2px; }
+.sheet-hint { margin: 0 0 6px; font-size: 12.5px; color: var(--ink3); }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.cal .wd { font-size: 12px; color: var(--ink3); padding: 6px 0; }
+.cal .day { width: min(40px, 100%); aspect-ratio: 1 / 1; height: auto; justify-self: center; display: grid; place-items: center; font-size: 15px; border-radius: 50%; color: var(--ink3); font-variant-numeric: tabular-nums; opacity: 0.55; }
+.cal button.day { opacity: 1; color: var(--ink); font-weight: 700; background: var(--accent-soft); }
+.cal button.day.cur { background: var(--accent); color: var(--screen); }
+.sheet-close { display: block; width: 100%; margin-top: 12px; height: 44px; border-radius: 12px; background: var(--screen); color: var(--accent); font-size: 16px; font-weight: 700; }
+
+/* 아이폰 같은 작은 화면에서는 프레임 없이 화면 전체를 메모 앱처럼 채운다 */
+@media (max-width: 520px), (max-height: 520px) {
+  body { padding-left: 0; padding-right: 0; padding-block: 0; background: var(--screen); }
+  body.on-detail { background: var(--card); }
+  .stage { align-items: stretch; }
+  .phone { max-width: none; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+  .status { display: none; }
+  .pane { padding-top: 0; }
+}
+
+@media (max-width: 380px) {
+  .title-block h1 { font-size: 28px; }
+  .article h2 { font-size: 20px; }
+}
+</style>
+
+<div class="stage">
+  <main class="phone" id="phone" aria-label="이샹의 아이폰 메모장">
+    <div class="status" aria-hidden="true">
+      <span>9:41</span>
+      <span class="icons">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 4.2a10 10 0 0 1 14 0"/><path d="M4 7a6.4 6.4 0 0 1 9 0"/><circle cx="8.5" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.7" y="0.7" width="22" height="11.6" rx="3.4" stroke="currentColor" opacity="0.5"/><rect x="2.2" y="2.2" width="19" height="8.6" rx="2" fill="currentColor"/><path d="M24.5 4.5v4c.8-.3 1.5-1.1 1.5-2s-.7-1.7-1.5-2z" fill="currentColor" opacity="0.5"/></svg>
+      </span>
+    </div>
+
+    <section class="pane list-pane" id="listPane" aria-label="일기 목록">
+      <div class="topbar">
+        <span></span>
+        <button class="icon-btn" id="openCal" aria-label="날짜로 이동">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+        </button>
+      </div>
+      <div class="scroll" id="listScroll">
+        <div class="title-block">
+          <h1>王奕翔的日记</h1>
+          <p id="countText"></p>
+        </div>
+        <label class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+          <input id="q" type="search" placeholder="메모 검색" autocomplete="off" aria-label="메모 검색">
+        </label>
+        <div id="groups"></div>
+      </div>
+    </section>
+
+    <section class="pane detail-pane" id="detailPane" aria-label="일기 보기">
+      <div class="topbar">
+        <button class="back-btn" id="back" aria-label="王奕翔的日记 목록으로">
+          <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
+          <span>王奕翔的日记</span>
+        </button>
+        <button class="icon-btn" id="openCal2" aria-label="날짜로 이동">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+        </button>
+      </div>
+      <div class="scroll" id="detailScroll">
+        <article class="article" id="article"></article>
+      </div>
+      <div class="toolbar">
+        <button class="step" id="prev"></button>
+        <span class="pos" id="pos"></span>
+        <button class="step" id="next"></button>
+      </div>
+    </section>
+
+    <div class="scrim" id="scrim"></div>
+    <div class="sheet" id="sheet" role="dialog" aria-label="날짜로 이동">
+      <div class="sheet-head">
+        <span class="month" id="calMonth"></span>
+        <span class="nav">
+          <button class="icon-btn" id="calPrev" aria-label="이전 달">
+            <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
+          </button>
+          <button class="icon-btn" id="calNext" aria-label="다음 달">
+            <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 8 8-8 8"/></svg>
+          </button>
+        </span>
+      </div>
+      <p class="sheet-hint">색이 있는 날짜에 일기가 있어요.</p>
+      <div class="cal" id="cal"></div>
+      <button class="sheet-close" id="calClose">닫기</button>
+    </div>
+  </main>
+</div>
+
+<script>
+/* 일기 데이터. 날짜(d)와 본문 문단 배열(body)만 바꾸면 화면이 그대로 따라온다.
+   아이폰 메모처럼 제목 칸은 따로 없고, 각 일기의 첫 문장이 제목이 된다. 날짜는 목록 둘째 줄에 나온다. */
+var ENTRIES = [
+  { d: "2018-07-09", body: [
+    "오늘은 내 생일이다! 주주가 생일 축하한다고 먼저 뽀뽀해 줬다. 너무 좋아서 한 번 더 해 달라고 하려다가 그대로 키스하려고 했는데, 주주가 부끄러웠는지 몸을 버둥거리다가 팔꿈치로 내 코를 때렸다.",
+    "코피가 났다. 주주는 계속 미안하다고 했지만 사실 별로 아프지도 않았다. 주주한테 먼저 뽀뽀받았으니까 오늘은 운이 좋은 날이다! 생일 최고!"
+  ] },
+  { d: "2018-08-09", body: [
+    "오늘부터 주주 생일까지 통조림을 하나씩 모으기로 했다. 하지무처럼 생일을 유통기한으로 정해 두면 꽤 낭만적일 것 같아서. 주주한테도 전에 물어봤는데 낭만 있는 일이라고 했으니까.",
+    "하지무는 파인애플 통조림을 먹었지만 나는 귤 통조림으로 하기로 했다. 집 앞 슈퍼에 귤 통조림이 제일 많이 쌓여 있기도 하고, 주주가 제일 좋아하는 과일도 귤이니까. 이것도 완전 데스티니!"
+  ] },
+  { d: "2018-08-18", body: [
+    "오늘도 통조림을 하나 사 왔다. 의주는 내가 매일 하나씩 사 오는 걸 알고 있어서 이제는 별로 신기해하지도 않는다.",
+    "그래도 생일까지 모아 두면 꽤 많아질 거라고 했더니 좁은 집에 그걸 다 어디에 둘 거냐고 했다. 글쎄, 일단 모아 보면 알겠지. 의주 생일 선물인데 이 정도는 해야지."
+  ] },
+  { d: "2018-09-07", body: [
+    "오늘은 의주 생일! 유통기한이 오늘까지인 통조림을 마지막으로 하나 더 구하려고 온 동네 슈퍼를 돌아다녔다. 결국 왕복 한 시간이나 걸리는 마트에서 겨우 찾았다. 한 달 동안 모은 통조림도 이제 딱 서른 개.",
+    "주주한테 어때, 주주 좀 감동? 하고 물었더니 표정이 묘했다. 그래도 분명 감동했을 거라고 생각한다. 생일 축하해 의주. 사랑해."
+  ] },
+  { d: "2018-12-25", body: [
+    "메리 크리스마스!  며칠 전부터 뭘 해 주면 좋아할까 고민했는데, 막상 당일이 되니 평소처럼 같이 밥을 먹고 영화를 보는 것만으로도 충분히 좋았다. 의주는 별다른 걸 기대하지 않았다고 했지만, 내가 준비한 선물을 보고 꽤 좋아했다. 그 표정을 보니 괜히 더 신경 써서 준비할 걸 그랬나 싶기도 했다.",
+    "저녁을 먹고 집에 돌아와서 영화를 보다가 평소보다 오래 붙어 있었다. 의주가 먼저 내 손을 잡았는데, 별것 아닌 일인데도 심장이 조금 빨리 뛰었다. 오늘은 의주가 평소보다 예뻐 보였다. 아니, 원래 예뻤는데 오늘은 유난히 그랬다. 이런 말을 하면 또 너무 자주 한다고 하겠지.",
+    "아무튼 오늘은 오래 기억할 것 같다. 의주도 그랬으면 좋겠다."
+  ] },
+  { d: "2019-01-01", body: [
+    "새해다! 올해도 의주랑 잘 지내야지. 새해 첫날부터 주주한테 사랑한다고 열 번쯤 말한 것 같은데, 아직 부족한 것 같다. 의주는 내가 너무 자주 말한다고 한다. 그런데 좋아하는데 어떡해.",
+    "오늘은 같이 밥을 먹고 영화를 봤다. 주주는 내가 고른 영화를 또 보냐고 했지만 결국 옆에 앉아서 같이 봤다. 오늘 본 영화에서 하지무가 사랑의 유통기한을 만 년으로 하고 싶다고 말하는 장면이 나왔다. 나는 그 대사가 참 좋다. 사랑에도 유통기한이 있다는 말은 조금 슬프지만, 만 년이라면 사실상 영원한 거랑 똑같은 거잖아!",
+    "의주한테도 꼭 말해 줘야겠다. 내년에도 같이 봐야지. 그다음 해에도, 그다음 해에도. 주주는 내가 만년 동안 사랑한다고 하면 믿을까? 믿든 말든 계속 말해 줘야겠다."
+  ] },
+  { d: "2019-01-17", body: [
+    "의주가 오늘 나한테 화냈다. 이유는 내가 욕실에 수건을 안 걸어 놔서. 사실 수건을 안 걸어 놓은 건 맞는데, 그렇게 화낼 일인가? 그래도 미안하다고 했다. 의주는 금방 풀렸다.",
+    "대신 저녁에 내가 좋아하는 음식을 해 줬다. 의주는 요리를 잘하는 편은 아니다. 그래도 맛있었다. 아니, 맛있다고 해야 한다. 의주가 날 생각해서 해 준 음식이니까."
+  ] },
+  { d: "2019-01-22", body: [
+    "오늘 의주랑 큰맘 먹고 데이트하러 갔다. 평소에는 편한 옷만 입고 동네에서 밥을 먹거나 산책하는 일이 많으니까, 오늘은 조금 분위기 있는 곳에 가 보고 싶었다. 예약도 하고 옷도 골라 입었다.",
+    "의주는 내가 왜 이렇게까지 차려입었냐고 했지만, 자기도 평소보다 신경 써서 입고 나왔다. 줄무늬 니트를 입고 왔길래 꿀벌 같다고, 오샤레 주주라고 하면서 예쁘다고 해 줬다. 그런 말은 집에서도 할 수 있지 않냐고 했지만 부끄러워하는 게 다 보였다. 좋았나 보지? 의주는 가끔 이런 귀여운 구석이 있다.",
+    "밥을 먹는 동안 의주가 생각보다 조용해서 어색한가 싶어 말을 걸었더니, 후식으로 나온 고구마 파르페가 맛있어서 먹는 데 집중하고 있었다고 했다. 다행이다. 다음에도 꼭 같이 와야겠다."
+  ] },
+  { d: "2019-02-03", body: [
+    "오늘 의주가 나한테 꿈이 뭐였냐고 물었다. 사실 그런 질문은 별로 생각해 본 적이 없다. 그냥 지금 하고 싶은 걸 하면서 사는 게 좋은데. 나도 의주한테 물어봤더니 의주는 아빠가 되는 게 꿈이었다고 했다. 조금 놀랐다. 그런 꿈을 가지고 있었구나.",
+    "의주는 자기가 아빠가 되면 어떤 사람일 것 같냐고 물었다. 나는 좋은 아빠가 될 것 같다고 했다. 의주는 왜 그렇게 생각하냐고 했다. 그냥. 주주는 나한테도 잘해 주니까. 나중에 아이가 생기면 나보다 의주를 더 좋아할지도 모르겠다. 조금 질투 날 것 같다. 그래도 좋겠다."
+  ] },
+  { d: "2019-02-07", body: [
+    "오늘 지하철에서 의주랑 장난을 쳤다. 사람이 많아서 손을 제대로 잡고 있기도 어려웠는데, 손가락이 스치기만 해도 의주가 깜짝 놀라는 게 재미있어서 조금 더 놀렸다. 손끝이 닿을 때마다 감전된 것처럼 움찔했더니 주주가 그만하라고 했다.",
+    "그러면서도 내가 손을 놓으면 다시 손가락을 걸어 왔다. 정말 웃긴다. 한 번은 내가 일부러 손을 뺐더니 주주가 먼저 손을 잡았다. 모르는 척했지만 사실 다 봤다. 다음에는 더 오래 장난쳐야겠다."
+  ] },
+  { d: "2019-02-14", body: [
+    "오늘은 발렌타인데이다. 의주한테 초콜릿을 받았다. 내가 더 많이 줬지만. 주주는 초콜릿을 별로 안 좋아한다고 했으면서 내가 준 건 다 먹었다. 귀엽다.",
+    "또, 오늘 의주랑 오래 걸었다. 날씨가 추워서 손을 잡고 다녔다. 주주는 내가 손을 너무 꽉 잡는다고 했다. 그런데 놓으면 또 잡는다. 뭐야. 이것도 귀엽다."
+  ] },
+  { d: "2019-02-20", body: [
+    "오늘은 아르바이트가 끝난 의주를 데리러 갔다. 집에 가는 길에 가부키초를 지나는데 호스트 클럽 전단을 나눠 주는 사람이 있었다. 의주가 그걸 거절하지 못하고 받아서 웃겼다. 그래서 예전에 내가 준 초콜릿은 그렇게 거절하더니 이런 건 잘 받는다고 놀렸다.",
+    "그냥 장난이었는데 의주가 갑자기 기분 나쁜 표정을 지었다. 내가 뭘 잘못했나? 의주는 그때랑 지금은 다르다고 했지만 아직도 정확히 무슨 뜻인지 모르겠다. 내일은 먼저 말을 걸어 봐야겠다."
+  ] },
+  { d: "2019-02-21", body: [
+    "어제 일 때문에 의주와 조금 어색했는데 오늘은 화해했다. 의주가 먼저 침대에서 나를 안으면서 미안하다고 했다. 초콜릿을 거절했던 건 내가 무섭게 생겨서 그랬다고 한다. 그때는 정말 내가 무서웠나 보다. 지금은 안 무섭다고 하니 다행이다.",
+    "나도 의주가 전단지를 받은 걸 보고 괜히 장난으로 초콜릿 이야기를 꺼냈다고 말했다. 의주는 내가 그걸 아직 기억하고 있을 줄 몰랐다고 했다. 당연히 기억하지. 의주가 나한테 준 것도, 내가 준 것도 다 기억한다.",
+    "같이 점심을 먹고 나서 의주에게 사랑한다고 말했다. 오늘은 열 번보다 조금 더 말한 것 같다. 의주는 그만하라고 했지만 웃고 있었다. 화해한 것 같다. 다행이다. 별것도 아닌 일로 다퉜지만 역시 주주와 사이가 안 좋은 건 싫다. 이제 다시 잘 지내야지!"
+  ] },
+  { d: "2019-02-22", body: [
+    "오늘 비가 왔다. 의주가 수업을 마치고 돌아오는 시간에 맞춰 우산을 들고 나갔다. 미리 말하면 혼자 올 수 있다고 할 게 뻔해서 말하지 않았다. 역 앞에서 기다리고 있는데 의주가 나를 발견하고는 조금 놀란 얼굴을 했다.",
+    "우산을 왜 들고 나왔냐고 물어서 보고싶어서 그랬다고 했다. 의주는 쓸데없는 소리 하지 말라면서도 내 쪽으로 바짝 붙었다. 카와이 주주 >.< 우산이 하나라 어깨가 조금 젖었는데, 의주가 내 쪽으로 우산을 기울여 줬다. 자기는 괜찮다면서.",
+    "집에 도착해서 보니 의주 쪽은 멀쩡하고 내 어깨만 젖어 있었다. 다음에는 더 큰 우산을 사야겠다. 아니면 그냥 같이 쓰는 큰 우산을 하나 더 사 둘까."
+  ] },
+  { d: "2019-03-02", body: [
+    "오늘도 왕가위 영화를 봤다. 주주는 이미 여러 번 본 영화라며 별로 기대하지 않는 얼굴이었지만, 결국 끝까지 같이 봤다.",
+    "영화 속 하지무가 파인애플 통조림을 서른 개나 먹는 장면을 보면서 주주가 또 말도 안 된다고 했다. 나는 언젠가 한 번쯤 따라 해 보고 싶다고 했다. 주주는 배탈 날 거라고 했지만, 사실 조금 궁금하다."
+  ] },
+  { d: "2019-03-10", body: [
+    "주주가 요즘 밥을 잘 안 먹는 것 같다. 과외가 많아서 그런지 집에 돌아오면 피곤하다고 바로 눕는다. 오늘은 저녁을 먹다가 반찬을 남기길래 더 먹으라고 했더니 배부르다고 했다. 정말 배부른 건지 귀찮아서 그러는 건지 모르겠다.",
+    "내가 없으면 더 대충 먹을 것 같아서 걱정이다. 며칠 동안 타이베이에 다녀와야 하는데, 그동안 잘 챙겨 먹을지 모르겠다. 돌아오면 맛있는 걸 먹으러 가야겠다."
+  ] },
+  { d: "2019-03-12", body: [
+    "주주랑 오랜만에 제대로 데이트를 했다. 며칠 전부터 어디에 갈지 찾아보고 예약도 해 뒀다. 주주는 이런 걸 언제 다 알아봤냐고 물었다. 그냥 주주랑 놀 생각을 했다고 했다.",
+    "식사를 마치고 근처를 걸었는데, 주주가 내가 오늘따라 유난이라고 했다. 평소에도 이 정도로 좋아한다고 말하는데 오늘만 그런 게 아니라고 했더니, 오늘은 말보다 행동이 더 많다고 했다. 그 말이 마음에 들었다. 주주가 내가 준비한 하루를 좋아해 준 것 같아서.",
+    "집에 돌아가는 길에도 손을 잡고 걸었다. 다음에는 어디로 데려갈까 생각 중이다."
+  ] },
+  { d: "2019-03-17", body: [
+    "오늘 주주가 집에 늦게 들어온다고 해서 우산을 들고 마중 나갔다. 비가 꽤 많이 왔다. 주주는 내가 왜 또 나왔냐고 했지만, 비 오는 날 혼자 걸어오게 하고 싶지 않았다.",
+    "우산을 씌워 주고 같이 걸었다. 주주가 내 팔에 매달리듯 붙어서 걷다가 물웅덩이를 밟았다. 신발이 젖었다고 투덜거리는 게 귀여웠다. 집에 도착해서 젖은 신발을 벗겨 주고 수건을 가져다줬다. 주주는 자기가 할 수 있다고 했지만 그냥 해 주고 싶었다.",
+    "이런 날은 내가 주주를 데리러 나갈 수 있어서 좋다. 별일 아닌데도 하루가 꽤 괜찮아진다."
+  ] },
+  { d: "2019-03-20", body: [
+    "타이베이에 다녀올 날짜를 정했다. 오랜만에 가족들을 만나고 오려고 한다. 주주는 과외 때문에 같이 가지 못한다고 했다. 아쉬워하는 것 같기도 하고 아닌 것 같기도 하다. 며칠이면 금방 돌아오니까 괜찮다. 돌아오는 길에 주주가 좋아할 만한 걸 사 와야겠다.",
+    "전에 이야기했던 통조림도 생각해 봤다. 한 달 동안 하나씩 모으려면 지금부터 준비해야 할 것 같다. 유통기한이 생일에 맞는 제품을 찾을 수 있을까. 괜히 이런 걸 찾는 데 시간을 쓰고 있다. 그래도 재미있다."
+  ] },
+  { d: "2019-03-25", body: [
+    "주주에게 깜짝 선물을 해 주고 싶다. 며칠 동안 집을 비우게 되니까 돌아왔을 때 발견할 수 있는 걸 준비하면 좋을 것 같다. 쪽지를 몇 개 숨겨 두기로 했다. 주주는 이런 장난을 귀찮아하면서도 꼭 찾아본다.",
+    "어디에 숨겨야 잘 찾을 수 있을까. 너무 쉬우면 재미없고 너무 어려우면 화낼 것 같다. 적당히 숨겨야겠다. 마지막 쪽지에는 좋은 소식도 적어 두고 싶다. 직접 말하면 더 좋겠지만, 이번에는 조금 특별하게 해 보고 싶다."
+  ] },
+  { d: "2019-03-28", body: [
+    "오늘 쪽지를 썼다. 여섯 개 정도면 충분할 것 같다. 주주가 자주 쓰는 물건 근처에 하나씩 숨겨 두었다. 금붕어 열쇠고리도 같이 두었다. 사진을 찍으라고 적어 놨는데, 정말 찍을지는 모르겠다.",
+    "주주는 가끔 내가 하는 장난을 이해하지 못하는 척한다. 그래도 나중에는 다 찾아볼 것이다. 돌아오면 쪽지를 전부 찾았는지 물어봐야겠다. 못 찾은 게 있으면 내가 직접 알려 줘야지."
+  ] },
+  { d: "2019-03-29", body: [
+    "오늘은 의주가 먼저 내 손을 잡았다. 별다른 말도 없이 손을 잡고 걷다가 내가 쳐다보니까 왜 보냐고 했다. 그냥 좋아서 본다고 했더니 앞이나 잘 보라고 했다. 의주는 가끔 자기가 나를 더 좋아하는 것처럼 보이는 순간이 있다. 물론 내가 더 좋아하지만.",
+    "집에 돌아와서도 한참 붙어 있었다. 주주는 덥다고 밀어냈지만 조금 있다가 다시 내 옆으로 왔다. 며칠 뒤면 타이베이에 가야 한다. 잠깐 다녀오는 것뿐인데 벌써 아쉽다. 돌아오면 오늘보다 더 오래 같이 있어야겠다."
+  ] },
+  { d: "2019-03-30", body: [
+    "타이베이행 비행기 시간을 조금 앞당겼다. 의주에게는 아직 말하지 않았다. 쪽지도 잘 숨겨 둔 것 같다. 좋은 소식도 직접 말할 수 있을 것 같다. 주주가 어떤 표정을 지을지 궁금하다.",
+    "오늘은 의주와 평소처럼 저녁을 먹고 별것 아닌 이야기를 나눴다. 이런 평범한 시간이 당연한 줄 알았는데 며칠 떨어져 있을 생각을 하니 조금 아쉽다. 돌아오면 주주가 좋아하는 걸 사 주고 싶다. 같이 밥을 먹고, 산책도 하고, 별것 아닌 이야기도 오래 해야겠다."
+  ] },
+  { d: "2019-03-31", body: [
+    "내일 아침 비행기를 타야 한다. 의주와 하루 종일 같이 있었는데도 집에 돌아와서는 괜히 아쉬워서 한참을 붙어 있었다. 며칠이면 금방 돌아오는 거 아니냐고 했지만, 나는 며칠도 생각보다 길 것 같다고 했다.",
+    "의주는 별생각 없이 웃었겠지만 나는 돌아가면 꼭 해 주고 싶은 말이 있다. 좋은 소식도 있고, 쪽지도 준비해 뒀다. 주주가 좋아했으면 좋겠다. 내일은 공항에 가기 전까지 최대한 같이 있어야겠다."
+  ] },
+  { d: "2019-04-01", body: [
+    "오늘은 의주와 함께 아침을 보냈다. 타이베이에 가는 날이라 그런지 평소와 다를 것도 없는 시간이 괜히 아깝게 느껴졌다. 의주는 잘 다녀오라고 했고, 도착하면 연락하라고 했다. 며칠만 떨어져 있는 건데 벌써 보고 싶다.",
+    "돌아가면 주주가 숨겨 둔 쪽지를 다 찾았는지 물어봐야겠다. 못 찾았으면 조금 서운할 것 같기도 하다. 그래도 결국 찾아낼 거라고 생각한다. 타이베이에서 준비한 것도 보여 줘야겠다. 조금 이른가 싶기도 하지만, 의주라면 분명 좋아할 것 같다. 돌아가면 꼭 말해야지."
+  ] }
+];
+
+(function () {
+  var WD = ["일", "월", "화", "수", "목", "금", "토"];
+  var asc = ENTRIES.slice().sort(function (a, b) { return a.d < b.d ? -1 : 1; });
+  var desc = asc.slice().reverse();
+  var byDate = {};
+  asc.forEach(function (e, i) { byDate[e.d] = i; });
+
+  var $ = function (id) { return document.getElementById(id); };
+  var phone = $("phone"), groups = $("groups"), q = $("q"), countText = $("countText");
+  var article = $("article"), detailScroll = $("detailScroll");
+  var sheet = $("sheet"), scrim = $("scrim");
+  var current = -1;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function parts(d) { var p = d.split("-"); return { y: +p[0], m: +p[1], d: +p[2] }; }
+  function kdate(d) { var p = parts(d); return p.y + "년 " + p.m + "월 " + p.d + "일"; }
+  function kshort(d) { var p = parts(d); return p.y + ". " + p.m + ". " + p.d + "."; }
+  var FOLDER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+  /* 아이폰 메모처럼 첫 줄이 제목, 그다음 내용이 미리보기가 된다 */
+  function lead(e) {
+    if (e._l) return e._l;
+    var t = e.body[0], m = /^[\s\S]*?[.!?](?=\s|$)/.exec(t);
+    var title = (m ? m[0] : t).trim();
+    var first = t.slice(title.length).trim();
+    var rest = [first].concat(e.body.slice(1)).filter(Boolean).join(" ");
+    return (e._l = { title: title, first: first, rest: rest });
+  }
+  function kdateShort(d) { var p = parts(d); return p.m + "월 " + p.d + "일"; }
+  function weekday(d) { var p = parts(d); return WD[new Date(p.y, p.m - 1, p.d).getDay()] + "요일"; }
+  function ktime(t) {
+    var h = +t.split(":")[0], mi = t.split(":")[1];
+    return (h < 12 ? "오전 " : "오후 ") + (h % 12 === 0 ? 12 : h % 12) + ":" + mi;
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function hashFor(d) { return "#n-" + d.replace(/-/g, ""); }
+
+  /* 목록 */
+  function renderList() {
+    var term = q.value.trim().toLowerCase();
+    var list = desc.filter(function (e) {
+      if (!term) return true;
+      return (kdate(e.d) + " " + e.body.join(" ")).toLowerCase().indexOf(term) !== -1;
+    });
+    countText.textContent = term ? "검색 결과 " + list.length + "개" : "총 " + asc.length + "개의 메모";
+    if (!list.length) {
+      groups.innerHTML = '<div class="empty">검색 결과가 없어요.<br>다른 단어로 찾아보세요.</div>';
+      return;
+    }
+    var html = "", year = null;
+    list.forEach(function (e, i) {
+      var y = parts(e.d).y;
+      if (y !== year) {
+        if (year !== null) html += "</div>";
+        html += '<h2 class="year">' + y + '</h2><div class="group">';
+        year = y;
+      }
+      html += '<button class="row" data-d="' + e.d + '"><span class="t">' + esc(lead(e).title) +
+        '</span><span class="p"><span class="sd">' + kshort(e.d) + "</span>" + esc(lead(e).rest) +
+        '</span><span class="f">' + FOLDER + "王奕翔的日记</span></button>";
+    });
+    groups.innerHTML = html + "</div>";
+  }
+
+  /* 상세 */
+  function renderDetail(i) {
+    current = i;
+    var e = asc[i];
+    var L = lead(e);
+    var paras = (L.first ? [L.first] : []).concat(e.body.slice(1));
+    article.innerHTML =
+      '<div class="stamp">' + kdate(e.d) + "</div>" +
+      "<h2>" + esc(L.title) + "</h2>" +
+      paras.map(function (p) { return "<p>" + esc(p) + "</p>"; }).join("");
+    detailScroll.scrollTop = 0;
+    var prev = asc[i - 1], next = asc[i + 1];
+    var bp = $("prev"), bn = $("next");
+    bp.disabled = !prev; bn.disabled = !next;
+    bp.innerHTML = '<svg width="10" height="16" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg><span>' + (prev ? "이전 · " + kdateShort(prev.d) : "처음 일기") + "</span>";
+    bn.innerHTML = "<span>" + (next ? kdateShort(next.d) + " · 다음" : "마지막 일기") + '</span><svg width="10" height="16" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 8 8-8 8"/></svg>';
+    bp.setAttribute("aria-label", prev ? "이전 일기 " + kdate(prev.d) : "이전 일기 없음");
+    bn.setAttribute("aria-label", next ? "다음 일기 " + kdate(next.d) : "다음 일기 없음");
+    $("pos").textContent = (i + 1) + " / " + asc.length;
+  }
+
+  /* 화면 전환은 주소의 # 부분으로 한다 */
+  function route() {
+    var m = /^#n-(\d{4})(\d{2})(\d{2})$/.exec(location.hash);
+    var key = m ? m[1] + "-" + m[2] + "-" + m[3] : null;
+    if (key && byDate.hasOwnProperty(key)) {
+      renderDetail(byDate[key]);
+      phone.classList.add("is-detail");
+    } else {
+      phone.classList.remove("is-detail");
+    }
+    document.body.classList.toggle("on-detail", phone.classList.contains("is-detail"));
+  }
+  function go(h) {
+    try { if (location.hash !== h) location.hash = h; } catch (err) {}
+    route();
+  }
+  function openEntry(d) { closeSheet(); go(hashFor(d)); }
+  function toList() { closeSheet(); go(""); }
+
+  groups.addEventListener("click", function (ev) {
+    var row = ev.target.closest(".row");
+    if (row) openEntry(row.getAttribute("data-d"));
+  });
+  q.addEventListener("input", renderList);
+  $("back").addEventListener("click", toList);
+  $("prev").addEventListener("click", function () { if (current > 0) openEntry(asc[current - 1].d); });
+  $("next").addEventListener("click", function () { if (current < asc.length - 1) openEntry(asc[current + 1].d); });
+  window.addEventListener("hashchange", route);
+
+  /* 날짜 이동 달력 */
+  var first = parts(asc[0].d), last = parts(asc[asc.length - 1].d);
+  var minM = first.y * 12 + first.m - 1, maxM = last.y * 12 + last.m - 1;
+  var viewM = maxM;
+
+  function renderCal() {
+    var y = Math.floor(viewM / 12), m = viewM % 12;
+    $("calMonth").textContent = y + "년 " + (m + 1) + "월";
+    $("calPrev").disabled = viewM <= minM;
+    $("calNext").disabled = viewM >= maxM;
+    $("calPrev").style.opacity = viewM <= minM ? 0.3 : 1;
+    $("calNext").style.opacity = viewM >= maxM ? 0.3 : 1;
+    var html = WD.map(function (w) { return '<div class="wd">' + w + "</div>"; }).join("");
+    var lead = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate();
+    for (var i = 0; i < lead; i++) html += "<div></div>";
+    var curKey = current >= 0 && phone.classList.contains("is-detail") ? asc[current].d : "";
+    for (var d = 1; d <= days; d++) {
+      var key = y + "-" + pad(m + 1) + "-" + pad(d);
+      if (byDate.hasOwnProperty(key)) {
+        html += '<button class="day' + (key === curKey ? " cur" : "") + '" data-d="' + key + '" aria-label="' + kdate(key) + ' 일기 열기">' + d + "</button>";
+      } else {
+        html += '<div class="day" aria-hidden="true">' + d + "</div>";
+      }
+    }
+    $("cal").innerHTML = html;
+  }
+  function openSheet() {
+    if (phone.classList.contains("is-detail") && current >= 0) {
+      var p = parts(asc[current].d); viewM = p.y * 12 + p.m - 1;
+    } else { viewM = maxM; }
+    renderCal();
+    sheet.classList.add("on"); scrim.classList.add("on");
+    $("calClose").focus({ preventScroll: true });
+  }
+  function closeSheet() { sheet.classList.remove("on"); scrim.classList.remove("on"); }
+
+  $("openCal").addEventListener("click", openSheet);
+  $("openCal2").addEventListener("click", openSheet);
+  $("calClose").addEventListener("click", closeSheet);
+  scrim.addEventListener("click", closeSheet);
+  $("calPrev").addEventListener("click", function () { if (viewM > minM) { viewM--; renderCal(); } });
+  $("calNext").addEventListener("click", function () { if (viewM < maxM) { viewM++; renderCal(); } });
+  $("cal").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button.day");
+    if (b) openEntry(b.getAttribute("data-d"));
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeSheet(); return; }
+    if (!phone.classList.contains("is-detail") || sheet.classList.contains("on")) return;
+    if (ev.target && ev.target.tagName === "INPUT") return;
+    if (ev.key === "ArrowLeft" && current > 0) openEntry(asc[current - 1].d);
+    if (ev.key === "ArrowRight" && current < asc.length - 1) openEntry(asc[current + 1].d);
+  });
+
+  renderList();
+  route();
+})();
+</script>
